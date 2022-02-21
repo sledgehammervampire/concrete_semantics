@@ -129,5 +129,26 @@ lemma assumes T: "\<forall>x y. T x y \<or> T y x"
 and A: "\<forall>x y. A x y \<and> A y x \<longrightarrow> x = y"
 and TA: "\<forall>x y. T x y \<longrightarrow> A x y" and "A x y"
 shows "T x y"
+proof (rule disjE[of "T x y" "T y x"])
+  show "T x y \<or> T y x" using T by blast
+next
+  show "T x y \<Longrightarrow> T x y" by assumption
+next
+  assume 1: "T y x"
+  hence "A y x" using TA by blast
+  hence "x = y" using A assms by blast
+  thus "T x y" using 1 by blast
+qed
+
+lemma "\<exists>ys zs. xs = ys@zs \<and> (length ys = length zs \<or> length ys = length zs + 1)"
+proof -
+  obtain k r where f1: "length xs = 2*k + r" and f2: "r = 0 \<or> r = 1" 
+    by (metis bot_nat_0.not_eq_extremum mod2_gr_0 mult_div_mod_eq)
+  let ?ys = "take (k+r) xs" and ?zs = "drop (k+r) xs"
+  have "length ?ys = k+r" and "length ?zs = k" using f1 by auto
+  hence "length ?ys = length ?zs \<or> length ?ys = length ?zs + 1" using f2 by simp
+  moreover have "xs = ?ys@?zs" by simp
+  ultimately show ?thesis by blast
+qed
 
 end
