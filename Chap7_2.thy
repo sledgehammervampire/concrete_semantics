@@ -1,4 +1,4 @@
-theory Chap7
+theory Chap7_2
   imports
 Main
 Chap3_1
