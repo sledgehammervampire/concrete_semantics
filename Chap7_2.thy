@@ -10,6 +10,7 @@ datatype com = SKIP
   | Seq com com ("_;;/ _"  [60, 61] 60)
   | If bexp com com ("(IF _/ THEN _/ ELSE _)"  [0, 0, 61] 61)
   | While bexp com ("(WHILE _/ DO _)"  [0, 61] 61)
+  | Repeat com bexp ("(REPEAT _/ UNTIL _)")
 
 value "''x'' ::= Plus (V ''y'') (N 1) ;; ''y'' ::= N 2"
 
@@ -21,6 +22,8 @@ Skip: "(SKIP, s) \<Rightarrow> s"
 | IfFalse: "\<lbrakk> \<not>bval b s; (c2, s) \<Rightarrow> t \<rbrakk> \<Longrightarrow> (IF b THEN c1 ELSE c2, s) \<Rightarrow> t"
 | WhileTrue: "\<lbrakk> bval b s; (c, s) \<Rightarrow> t; (WHILE b DO c, t) \<Rightarrow> u \<rbrakk> \<Longrightarrow> (WHILE b DO c, s) \<Rightarrow> u"
 | WhileFalse: "\<not>bval b s \<Longrightarrow> (WHILE b DO c, s) \<Rightarrow> s"
+| RepeatTrue: "\<lbrakk> bval b s; (c, s) \<Rightarrow> t \<rbrakk> \<Longrightarrow> (REPEAT c UNTIL b, s) \<Rightarrow> t"
+| RepeatFalse: "\<lbrakk> \<not>bval b s; (c, s) \<Rightarrow> t; (REPEAT c UNTIL b, t) \<Rightarrow> u \<rbrakk> \<Longrightarrow> (REPEAT c UNTIL b, s) \<Rightarrow> u"
 
 schematic_goal ex: "(''x'' ::= N 5;; '' y'' ::= V ''x'', s) \<Rightarrow> ?t"
   apply (rule Seq)
@@ -57,6 +60,8 @@ thm IfE
 inductive_cases WhileE[elim]: "(WHILE b DO c, s) \<Rightarrow> u"
 thm WhileE
 text \<open>only [elim]: [elim!] would not terminate\<close>
+inductive_cases RepeatE[elim]: "(REPEAT c UNTIL b, s) \<Rightarrow> u"
+thm RepeatE
 
 lemma assign_simp:
 "(x ::= a, s) \<Rightarrow> t \<longleftrightarrow> t = s(x := aval a s)"

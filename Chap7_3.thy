@@ -1,9 +1,9 @@
 theory Chap7_3
-  imports 
-Main 
+  imports
+Main
 Chap7_2
 "HOL-IMP.Star"
-begin 
+begin
 
 inductive small_step :: "com \<times> state \<Rightarrow> com \<times> state \<Rightarrow> bool" (infix "\<rightarrow>" 55) where
 Assign: "(x ::= a, s) \<rightarrow> (SKIP, s(x := aval a s))"
@@ -12,19 +12,19 @@ Assign: "(x ::= a, s) \<rightarrow> (SKIP, s(x := aval a s))"
 | IfTrue: "bval b s \<Longrightarrow> (IF b THEN p ELSE q, s) \<rightarrow> (p, s)"
 | IfFalse: "\<not>bval b s \<Longrightarrow> (IF b THEN p ELSE q, s) \<rightarrow> (q, s)"
 | While: "(WHILE b DO p, s) \<rightarrow> (IF b THEN p ;; WHILE b DO p ELSE SKIP, s)"
-
+| Repeat: "(REPEAT p UNTIL b, s) \<rightarrow> (IF b THEN p ELSE( p ;; REPEAT p UNTIL b), s)"
 code_pred small_step .
 
 abbreviation small_steps :: "com \<times> state \<Rightarrow> com \<times> state \<Rightarrow> bool" (infix "\<rightarrow>*" 55)
   where "x \<rightarrow>* y \<equiv> star small_step x y"
 
-values "{(c', map t [''x'', ''y'', ''z'']) | c' t. 
+values "{(c', map t [''x'', ''y'', ''z'']) | c' t.
 (''x'' ::= V ''z'' ;; ''y'' ::= V ''x'', <''x'' := 3, ''y'' := 7, ''z'' := 5>) \<rightarrow>* (c', t)}"
 
-values "{(c', map t [''x'', ''y'']) | c' t. 
+values "{(c', map t [''x'', ''y'']) | c' t.
 (IF Less (V ''x'') (N 4) THEN ''y'' ::= N 0 ELSE SKIP, <''x'' := 3, ''y'' := 7>) \<rightarrow>* (c', t)}"
 
-values "{(c', map t [''x'']) | c' t. 
+values "{(c', map t [''x'']) | c' t.
 (WHILE Less (V ''x'') (N 3) DO ''x'' ::= Plus (V ''x'') (N 1), <''x'' := 0>) \<rightarrow>* (c', t)}"
 
 inductive_cases SkipE[elim!]: "(SKIP, s) \<rightarrow> cs"
@@ -37,6 +37,8 @@ inductive_cases IfE[elim!]: "(IF b THEN c1 ELSE c2, s) \<rightarrow> cs"
 thm IfE
 inductive_cases WhileE[elim]: "(WHILE b DO c, s) \<rightarrow> cs"
 thm WhileE
+inductive_cases RepeatE[elim]: "(REPEAT c UNTIL b, s) \<rightarrow> cs"
+thm RepeatE
 
 lemma "\<lbrakk> (p, s) \<rightarrow>* (SKIP, s'); (p', s') \<rightarrow>* cs \<rbrakk> \<Longrightarrow> (p ;; p', s) \<rightarrow>* cs"
   apply (induct p s SKIP s' rule: star_induct)
@@ -71,7 +73,10 @@ lemma "cs \<Rightarrow> t \<Longrightarrow> cs \<rightarrow>* (SKIP, t)"
   using While apply blast
     apply (rule_tac y="(SKIP, s)" in star.step)
   using IfFalse apply blast
-    apply simp
+      apply simp
+  using Repeat
+     apply (meson small_step.IfTrue star.step)
+  apply (meson Repeat bs_ref_ss_aux small_step.IfFalse star.step)
   using bs_ref_ss_aux by blast+
 
 lemma bs_ref_ss: "cs \<Rightarrow> t \<Longrightarrow> cs \<rightarrow>* (SKIP, t)"
@@ -81,6 +86,16 @@ proof (induct rule: big_step.induct)
 next
   case WhileTrue
   thus ?case by (meson bs_ref_ss_aux While small_step.IfTrue star.step)
+next
+  case (RepeatFalse b s c t u)
+  hence "(REPEAT c UNTIL b, s) \<rightarrow>* (c ;; REPEAT c UNTIL b, s)"
+    by (meson Repeat small_step.IfFalse star.step star_step1)
+  moreover have "\<dots> \<rightarrow>* (REPEAT c UNTIL b, t)"
+    using RepeatFalse.hyps(3) bs_ref_ss_aux by blast
+  ultimately have "(REPEAT c UNTIL b, s) \<rightarrow>* (REPEAT c UNTIL b, t)"
+    by (meson star_trans)
+  thus ?case
+    by (meson RepeatFalse.hyps(5) star_trans)
 qed (meson small_step.intros star.intros)+
 
 lemma "x \<rightarrow> y \<Longrightarrow> y \<rightarrow>* (SKIP, t) \<Longrightarrow> y \<Rightarrow> t \<Longrightarrow> x \<Rightarrow> t"
@@ -121,7 +136,8 @@ lemma final_iff_SKIP: "final (c, s) = (c = SKIP)"
   using small_step.Assign apply blast
   apply (metis Seq1 Seq2 com.simps(8) surj_pair)
   apply (metis com.simps(10) small_step.IfFalse small_step.IfTrue)
-  using While by blast
+  using While apply blast
+  using Repeat by blast
 
 lemma "(\<exists>t. cs \<Rightarrow> t) = (\<exists>cs'. cs \<rightarrow>* cs' \<and> final cs')"
   by (metis bs_ref_ss final_iff_SKIP ss_ref_bs surj_pair)
