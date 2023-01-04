@@ -3,7 +3,7 @@ theory Chap7_2
 Main
 Chap3_1
 Chap3_2
-begin 
+begin
 
 datatype com = SKIP
   | Assign vname aexp ("_ ::= _" [1000, 61] 61)
@@ -98,11 +98,11 @@ lemma
 "\<lbrakk> (c, s) \<Rightarrow> t; (c, s) \<Rightarrow> t' \<rbrakk> \<Longrightarrow> t = t'"
 proof (induct arbitrary: t' rule: big_step_induct)
   fix b s c t u t'
-  assume a1: "bval b s" and a2: "(c, s) \<Rightarrow> t" 
+  assume a1: "bval b s" and a2: "(c, s) \<Rightarrow> t"
   assume a4: "\<And>t'. (c, s) \<Rightarrow> t' \<Longrightarrow> t = t'"
   assume a5: "\<And>t'. (WHILE b DO c, t) \<Rightarrow> t' \<Longrightarrow> u = t'"
   assume a3: "(WHILE b DO c, s) \<Rightarrow> t'"
-  have "(WHILE b DO c, t) \<Rightarrow> t'" 
+  have "(WHILE b DO c, t) \<Rightarrow> t'"
     apply (rule WhileE[OF a3])
     using a4 a1 by blast+
   thus "u = t'" using a5 by blast
