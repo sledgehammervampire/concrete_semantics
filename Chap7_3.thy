@@ -12,7 +12,7 @@ Assign: "(x ::= a, s) \<rightarrow> (SKIP, s(x := aval a s))"
 | IfTrue: "bval b s \<Longrightarrow> (IF b THEN p ELSE q, s) \<rightarrow> (p, s)"
 | IfFalse: "\<not>bval b s \<Longrightarrow> (IF b THEN p ELSE q, s) \<rightarrow> (q, s)"
 | While: "(WHILE b DO p, s) \<rightarrow> (IF b THEN p ;; WHILE b DO p ELSE SKIP, s)"
-| Repeat: "(REPEAT p UNTIL b, s) \<rightarrow> (IF b THEN p ELSE( p ;; REPEAT p UNTIL b), s)"
+| Repeat: "(REPEAT p UNTIL b, s) \<rightarrow> (p ;; IF b THEN SKIP ELSE REPEAT p UNTIL b, s)"
 | ChoiceLeft: "(p OR q, s) \<rightarrow> (p, s)"
 | ChoiceRight: "(p OR q, s) \<rightarrow> (q, s)"
 
@@ -60,31 +60,20 @@ lemma bs_ref_ss_aux: "\<lbrakk> (p, s) \<rightarrow>* (SKIP, s'); (p', s') \<rig
 
 lemma "cs \<Rightarrow> t \<Longrightarrow> cs \<rightarrow>* (SKIP, t)"
   apply (induct rule: big_step.induct)
-        apply simp
-  using Assign apply blast
-      defer
-      apply (rule_tac y="(c1, s)" in star.step)
-  using IfTrue apply blast
-      apply assumption
-     apply (rule_tac y="(c2, s)" in star.step)
-  using IfFalse apply blast
-     apply assumption
-    apply (rule_tac y="(IF b THEN c;; WHILE b DO c ELSE SKIP, s)" in star.step)
-  using While apply blast
-    apply (rule_tac y="(c;; WHILE b DO c, s)" in star.step)
-  using IfTrue apply blast
-    defer
-    apply (rule_tac y="(IF b THEN c;; WHILE b DO c ELSE SKIP, s)" in star.step)
-  using While apply blast
-    apply (rule_tac y="(SKIP, s)" in star.step)
-  using IfFalse apply blast
-      apply simp
-  using Repeat
-     apply (meson small_step.IfTrue star.step)
-      apply (meson Repeat bs_ref_ss_aux small_step.IfFalse star.step)
-  apply (meson small_step.ChoiceLeft star.simps)
-  apply (meson small_step.ChoiceRight star.step)
-  using bs_ref_ss_aux by blast+
+  apply simp
+  using small_step.Assign apply blast
+  using bs_ref_ss_aux apply blast
+  apply (meson small_step.IfTrue star.step)
+  apply (meson small_step.IfFalse star.simps)
+  apply (meson While bs_ref_ss_aux small_step.IfTrue star.step)
+      apply (meson While small_step.IfFalse star.step star_step1)
+  subgoal for b t c s
+   apply (rule star.step[where y="(c;; IF b THEN SKIP ELSE REPEAT c UNTIL b, s)"])
+    using Repeat apply blast
+    by (simp add: bs_ref_ss_aux small_step.IfTrue)
+  apply (meson Repeat bs_ref_ss_aux small_step.IfFalse star.step)
+  apply (meson small_step.ChoiceLeft star.step)
+  by (meson small_step.ChoiceRight star.step)
 
 lemma bs_ref_ss: "cs \<Rightarrow> t \<Longrightarrow> cs \<rightarrow>* (SKIP, t)"
 proof (induct rule: big_step.induct)
@@ -94,15 +83,11 @@ next
   case WhileTrue
   thus ?case by (meson bs_ref_ss_aux While small_step.IfTrue star.step)
 next
-  case (RepeatFalse b s c t u)
-  hence "(REPEAT c UNTIL b, s) \<rightarrow>* (c ;; REPEAT c UNTIL b, s)"
-    by (meson Repeat small_step.IfFalse star.step star_step1)
-  moreover have "\<dots> \<rightarrow>* (REPEAT c UNTIL b, t)"
-    using RepeatFalse.hyps(3) bs_ref_ss_aux by blast
-  ultimately have "(REPEAT c UNTIL b, s) \<rightarrow>* (REPEAT c UNTIL b, t)"
-    by (meson star_trans)
-  thus ?case
-    by (meson RepeatFalse.hyps(5) star_trans)
+  case RepeatFalse
+  thus ?case by (meson Repeat bs_ref_ss_aux small_step.IfFalse star.step)
+next
+  case RepeatTrue
+  thus ?case by (meson Repeat bs_ref_ss_aux small_step.IfTrue star.step star_step1)
 qed (meson small_step.intros star.intros)+
 
 lemma "x \<rightarrow> y \<Longrightarrow> y \<rightarrow>* (SKIP, t) \<Longrightarrow> y \<Rightarrow> t \<Longrightarrow> x \<Rightarrow> t"
