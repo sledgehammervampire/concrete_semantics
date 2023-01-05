@@ -11,6 +11,7 @@ datatype com = SKIP
   | If bexp com com ("(IF _/ THEN _/ ELSE _)"  [0, 0, 61] 61)
   | While bexp com ("(WHILE _/ DO _)"  [0, 61] 61)
   | Repeat com bexp ("(REPEAT _/ UNTIL _)")
+  | Choice com com ("_ OR _" [60, 61] 60)
 
 value "''x'' ::= Plus (V ''y'') (N 1) ;; ''y'' ::= N 2"
 
@@ -24,6 +25,8 @@ Skip: "(SKIP, s) \<Rightarrow> s"
 | WhileFalse: "\<not>bval b s \<Longrightarrow> (WHILE b DO c, s) \<Rightarrow> s"
 | RepeatTrue: "\<lbrakk> bval b s; (c, s) \<Rightarrow> t \<rbrakk> \<Longrightarrow> (REPEAT c UNTIL b, s) \<Rightarrow> t"
 | RepeatFalse: "\<lbrakk> \<not>bval b s; (c, s) \<Rightarrow> t; (REPEAT c UNTIL b, t) \<Rightarrow> u \<rbrakk> \<Longrightarrow> (REPEAT c UNTIL b, s) \<Rightarrow> u"
+| ChoiceLeft: "(c, s) \<Rightarrow> t \<Longrightarrow> (c OR c', s) \<Rightarrow> t"
+| ChoiceRight: "(c', s) \<Rightarrow> t \<Longrightarrow> (c OR c', s) \<Rightarrow> t"
 
 schematic_goal ex: "(''x'' ::= N 5;; '' y'' ::= V ''x'', s) \<Rightarrow> ?t"
   apply (rule Seq)
@@ -62,6 +65,8 @@ thm WhileE
 text \<open>only [elim]: [elim!] would not terminate\<close>
 inductive_cases RepeatE[elim]: "(REPEAT c UNTIL b, s) \<Rightarrow> u"
 thm RepeatE
+inductive_cases ChoiceE[elim!]: "(p OR q, s) \<Rightarrow> t"
+thm ChoiceE
 
 lemma assign_simp:
 "(x ::= a, s) \<Rightarrow> t \<longleftrightarrow> t = s(x := aval a s)"
@@ -94,39 +99,5 @@ lemma sim_while_cong_aux: "(WHILE b DO c, s) \<Rightarrow> t \<Longrightarrow> c
 
 lemma sim_while_cong: "c \<sim> c' \<Longrightarrow> WHILE b DO c \<sim> WHILE b DO c'"
   using sim_while_cong_aux by meson
-
-lemma imp_det:
-"\<lbrakk> (c, s) \<Rightarrow> t; (c, s) \<Rightarrow> t' \<rbrakk> \<Longrightarrow> t = t'"
-  by (induct arbitrary: t' rule: big_step_induct) blast+
-
-lemma
-"\<lbrakk> (c, s) \<Rightarrow> t; (c, s) \<Rightarrow> t' \<rbrakk> \<Longrightarrow> t = t'"
-proof (induct arbitrary: t' rule: big_step_induct)
-  fix b s c t u t'
-  assume a1: "bval b s" and a2: "(c, s) \<Rightarrow> t"
-  assume a4: "\<And>t'. (c, s) \<Rightarrow> t' \<Longrightarrow> t = t'"
-  assume a5: "\<And>t'. (WHILE b DO c, t) \<Rightarrow> t' \<Longrightarrow> u = t'"
-  assume a3: "(WHILE b DO c, s) \<Rightarrow> t'"
-  have "(WHILE b DO c, t) \<Rightarrow> t'"
-    apply (rule WhileE[OF a3])
-    using a4 a1 by blast+
-  thus "u = t'" using a5 by blast
-qed blast+
-
-lemma
-"\<lbrakk> (c, s) \<Rightarrow> t; (c, s) \<Rightarrow> t' \<rbrakk> \<Longrightarrow> t = t'"
-proof (induct arbitrary: t' rule: big_step_induct)
-  fix b s c t u t'
-  assume "bval b s" and "(c, s) \<Rightarrow> t"
-  assume IHc: "\<And>t'. (c, s) \<Rightarrow> t' \<Longrightarrow> t = t'"
-  assume IHw: "\<And>t'. (WHILE b DO c, t) \<Rightarrow> t' \<Longrightarrow> u = t'"
-  assume "(WHILE b DO c, s) \<Rightarrow> t'"
-  with \<open>bval b s\<close> obtain s\<^sub>1' where
-    c: "(c, s) \<Rightarrow> s\<^sub>1'" and
-    w: "(WHILE b DO c, s\<^sub>1') \<Rightarrow> t'"
-    by auto
-  from c IHc have "s\<^sub>1' = t" by blast
-  with w IHw show "u = t'" by blast
-qed blast+
 
 end

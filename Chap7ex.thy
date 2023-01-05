@@ -9,6 +9,7 @@ fun assigned :: "com \<Rightarrow> vname set" where
 | "assigned (IF v THEN va ELSE vb) = assigned va \<union> assigned vb"
 | "assigned (WHILE v DO va) = assigned va"
 | "assigned (REPEAT v UNTIL va) = assigned v"
+| "assigned (p OR q) = assigned p \<union> assigned q"
 
 lemma "\<lbrakk> (c, s) \<Rightarrow> t; x \<notin> assigned c \<rbrakk> \<Longrightarrow> s x = t x"
   apply (induct rule: big_step_induct)
@@ -21,13 +22,14 @@ fun skip :: "com \<Rightarrow> bool" where
 | "skip (IF v THEN va ELSE vb) = (skip va \<and> skip vb)"
 | "skip (WHILE v DO va) = (\<forall>s. \<not>bval v s)"
 | "skip (REPEAT v UNTIL va) = (skip v \<and> (\<forall>s. bval va s))"
+| "skip (p OR q) = (skip p \<and> skip q)"
+
 lemma "skip c \<Longrightarrow> c \<sim> SKIP"
-  apply (induct c rule: skip.induct)
-      apply simp_all
-  using assign_simp apply auto
-   apply (metis Seq Skip)
-   apply (meson Skip big_step.IfFalse big_step.IfTrue)
-  using RepeatTrue Skip by presburger
+  apply (induct c rule: skip.induct; clarsimp)
+  using assign_simp apply auto[1]
+  apply fastforce
+  apply (metis Chap7_2.IfE big_step.IfFalse big_step.IfTrue)
+  by auto
 
 lemma skip_while_aux: "\<lbrakk> (WHILE b DO c, s) \<Rightarrow> s'; bval b s \<rbrakk> \<Longrightarrow> \<not>bval b s'"
   apply (induct "WHILE b DO c" s s' rule: big_step_induct)
@@ -59,8 +61,6 @@ lemma "c \<sim> SKIP \<Longrightarrow> skip c"
   apply (induction c)
       apply simp_all
      apply (metis Chap7_2.SkipE big_step.Assign fun_upd_idem_iff)
-    prefer 3
-    apply (meson Skip skip_while_aux)
   oops
 
 fun skip' :: "com \<Rightarrow> bool" where
@@ -70,12 +70,13 @@ fun skip' :: "com \<Rightarrow> bool" where
 | "skip' (IF v THEN va ELSE vb) = (skip' va \<and> skip' vb)"
 | "skip' (WHILE v DO va) = False"
 | "skip' (REPEAT v UNTIL va) = False"
+| "skip' (p OR q) = (skip' p \<and> skip' q)"
 
 lemma "skip' c \<Longrightarrow> c \<sim> SKIP"
-  apply (induct c rule: skip'.induct)
-      apply simp_all
-  apply (metis Seq Skip imp_det)
-  by (metis Chap7_2.IfE big_step.IfFalse big_step.IfTrue)
+  apply (induct c rule: skip'.induct; clarsimp)
+    apply fastforce
+  apply (metis Chap7_2.IfE big_step.IfFalse big_step.IfTrue)
+  by blast
 
 fun deskip :: "com \<Rightarrow> com" where
 "deskip SKIP = SKIP"
@@ -87,6 +88,7 @@ if p' = SKIP then q' else if q' = SKIP then p' else p';;q')"
 | "deskip (IF b THEN p ELSE q) = IF b THEN deskip p ELSE deskip q"
 | "deskip (WHILE b DO p) = WHILE b DO deskip p"
 | "deskip (REPEAT p UNTIL b) = REPEAT deskip p UNTIL b"
+| "deskip (p OR q) = deskip p OR deskip q"
 
 lemma "deskip (SKIP ;; WHILE b DO (x ::= a;; SKIP)) = WHILE b DO x ::= a"
   by simp
@@ -99,40 +101,46 @@ lemma sim_rep_cong_aux: "(REPEAT c UNTIL b, s) \<Rightarrow> t \<Longrightarrow>
 
 lemma "deskip c \<sim> c"
   apply (induction c rule: deskip.induct; clarsimp)
-                      apply safe
-                      apply (blast+)[9]
-  using assign_simp apply auto[13]
-                      apply (metis Chap7_2.SkipE Seq big_step.Assign)
-                      apply auto[2]
-                      apply ((metis Chap7_2.SkipE Seq Skip)+)[8]
-                      apply auto[2]
-                      apply ((metis Chap7_2.SkipE Seq big_step.IfTrue big_step.IfFalse)+)[4]
-                      apply (blast, blast, force)
-                      apply (metis Chap7_2.SkipE Seq)
-                      apply auto[1]
+                      apply (blast+)[7]
+                      apply (case_tac "deskip (vb;; vc) = SKIP"; simp)
+                      apply (metis Chap7_2.SeqE Chap7_2.SkipE Seq Skip)
+                      apply (blast+)[5]
+                      apply (case_tac "deskip (v;; va) = SKIP"; simp)
+                      apply (metis Chap7_2.SeqE Chap7_2.SkipE Seq Skip)
                       apply blast
-                      apply auto[1]
-                      apply (metis Chap7_2.SkipE Seq)
-                      apply (blast+)[6]
-  using Skip apply auto[2]
-                      apply (metis Chap7_2.SkipE Seq big_step.IfTrue)
-                      apply (metis Chap7_2.SkipE Seq big_step.IfFalse)
-                      apply auto[2]
-                      apply (blast+)[20]
-  using Seq Skip apply force
-                      apply (metis Chap7_2.SkipE Seq)
-                      apply auto[1]
-  using Seq apply presburger
-                      apply (meson Seq big_step.IfTrue)
-                      apply (meson Seq big_step.IfFalse)
-  using Seq big_step.IfTrue apply presburger
-  using Seq big_step.IfFalse apply presburger
-  using Skip apply auto[7]
-                    apply (metis Chap7_2.SkipE Seq)
-                   apply auto[1]
-  using Seq apply presburger
-                 apply (blast+)[12]
-  using sim_while_cong_aux sim_rep_cong_aux by presburger+
+                      apply (case_tac "deskip (vb;; vc) = SKIP"; case_tac "deskip (v;; va) = SKIP"; simp)
+                      apply (metis (full_types) Chap7_2.SeqE Chap7_2.SkipE Seq)
+                      apply ((metis Chap7_2.SeqE Chap7_2.SkipE Seq Skip)+)[2]
+                      apply blast
+                      apply ( case_tac "deskip (v;; va) = SKIP"; simp)
+                      apply (metis Chap7_2.SeqE Chap7_2.SkipE Seq Skip)
+                      apply blast
+                      apply (case_tac "deskip (v;; va) = SKIP"; simp)
+                      apply (metis Chap7_2.SeqE Chap7_2.SkipE Seq Skip)
+                      apply (meson Chap7_2.SeqE Seq)
+                      apply (case_tac "deskip (v;; va) = SKIP"; simp)
+                      apply (metis Chap7_2.SeqE Chap7_2.SkipE Seq Skip)
+                      apply blast
+                      apply (case_tac "deskip (v;; va) = SKIP"; simp)
+                      apply (metis Chap7_2.SeqE Chap7_2.SkipE Seq Skip)
+                      apply blast
+                      apply (meson Chap7_2.SeqE Seq)
+                      apply (case_tac "deskip (vc;; vd) = SKIP"; simp)
+                      apply (metis Chap7_2.SeqE Chap7_2.SkipE Seq Skip)
+                      apply ((meson Chap7_2.SeqE Seq)+)[6]
+                      apply (case_tac "deskip (vb;; vc) = SKIP"; simp)
+                      apply (metis Chap7_2.SeqE Chap7_2.SkipE Seq Skip)
+                      apply ((meson Chap7_2.SeqE Seq)+)[6]
+                apply (case_tac "deskip (vb;; vc) = SKIP"; simp)
+                 apply (metis Chap7_2.SeqE Chap7_2.SkipE Seq Skip)
+                apply ((meson Chap7_2.SeqE Seq)+)[6]
+          apply (case_tac "deskip (vb;; vc) = SKIP"; simp)
+           apply (metis Chap7_2.SeqE Chap7_2.SkipE Seq Skip)
+          apply ((meson Chap7_2.SeqE Seq)+)[6]
+      apply (blast+)[2]
+    apply (simp add: sim_while_cong)
+   apply (meson sim_rep_cong_aux)
+  by blast
 
 inductive astep :: "aexp * state \<Rightarrow> aexp \<Rightarrow> bool" (infix "\<leadsto>" 50) where
 "(V x, s) \<leadsto> N (s x)"
@@ -214,15 +222,10 @@ fun dewhile :: "com \<Rightarrow> com" where
 | "dewhile (IF b THEN p ELSE q) = IF b THEN (dewhile p) ELSE (dewhile q)"
 | "dewhile (WHILE b DO c) = IF (Not b) THEN SKIP ELSE DO c WHILE b"
 | "dewhile (REPEAT c UNTIL b) = REPEAT dewhile c UNTIL b"
-
-lemma sim_rep_cong_aux: "(REPEAT p UNTIL b, s) \<Rightarrow> t \<Longrightarrow> p \<sim> q \<Longrightarrow> (REPEAT q UNTIL b, s) \<Rightarrow> t"
-  by (induct "REPEAT p UNTIL b" s t rule: big_step_induct; auto)
-
-lemma sim_rep_cong: "p \<sim> q \<Longrightarrow> ((REPEAT p UNTIL b) \<sim> (REPEAT q UNTIL b))"
-  by (metis sim_rep_cong_aux)
+| "dewhile (p OR q) = dewhile p OR dewhile q"
 
 lemma "dewhile c \<sim> c"
   apply (induct c)
-  using DoWhile_def Seq Skip big_step.IfFalse big_step.IfTrue sim_rep_cong by auto
+  using DoWhile_def Seq Skip big_step.IfFalse big_step.IfTrue sim_rep_cong_aux by auto
 
 end

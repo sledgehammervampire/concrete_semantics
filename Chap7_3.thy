@@ -13,6 +13,9 @@ Assign: "(x ::= a, s) \<rightarrow> (SKIP, s(x := aval a s))"
 | IfFalse: "\<not>bval b s \<Longrightarrow> (IF b THEN p ELSE q, s) \<rightarrow> (q, s)"
 | While: "(WHILE b DO p, s) \<rightarrow> (IF b THEN p ;; WHILE b DO p ELSE SKIP, s)"
 | Repeat: "(REPEAT p UNTIL b, s) \<rightarrow> (IF b THEN p ELSE( p ;; REPEAT p UNTIL b), s)"
+| ChoiceLeft: "(p OR q, s) \<rightarrow> (p, s)"
+| ChoiceRight: "(p OR q, s) \<rightarrow> (q, s)"
+
 code_pred small_step .
 
 abbreviation small_steps :: "com \<times> state \<Rightarrow> com \<times> state \<Rightarrow> bool" (infix "\<rightarrow>*" 55)
@@ -39,6 +42,8 @@ inductive_cases WhileE[elim]: "(WHILE b DO c, s) \<rightarrow> cs"
 thm WhileE
 inductive_cases RepeatE[elim]: "(REPEAT c UNTIL b, s) \<rightarrow> cs"
 thm RepeatE
+inductive_cases ChoiceE[elim!]: "(p OR q, s) \<rightarrow> cs"
+thm ChoiceE
 
 lemma "\<lbrakk> (p, s) \<rightarrow>* (SKIP, s'); (p', s') \<rightarrow>* cs \<rbrakk> \<Longrightarrow> (p ;; p', s) \<rightarrow>* cs"
   apply (induct p s SKIP s' rule: star_induct)
@@ -76,7 +81,9 @@ lemma "cs \<Rightarrow> t \<Longrightarrow> cs \<rightarrow>* (SKIP, t)"
       apply simp
   using Repeat
      apply (meson small_step.IfTrue star.step)
-  apply (meson Repeat bs_ref_ss_aux small_step.IfFalse star.step)
+      apply (meson Repeat bs_ref_ss_aux small_step.IfFalse star.step)
+  apply (meson small_step.ChoiceLeft star.simps)
+  apply (meson small_step.ChoiceRight star.step)
   using bs_ref_ss_aux by blast+
 
 lemma bs_ref_ss: "cs \<Rightarrow> t \<Longrightarrow> cs \<rightarrow>* (SKIP, t)"
@@ -134,10 +141,11 @@ lemma final_iff_SKIP: "final (c, s) = (c = SKIP)"
   apply (induction c)
   unfolding final_def apply blast
   using small_step.Assign apply blast
-  apply (metis Seq1 Seq2 com.simps(8) surj_pair)
-  apply (metis com.simps(10) small_step.IfFalse small_step.IfTrue)
+  apply (metis Seq1 Seq2 com.distinct(3) old.prod.exhaust)
+  apply (metis com.distinct(5) small_step.IfFalse small_step.IfTrue)
   using While apply blast
-  using Repeat by blast
+  using Repeat apply blast
+  using small_step.ChoiceLeft by blast
 
 lemma "(\<exists>t. cs \<Rightarrow> t) = (\<exists>cs'. cs \<rightarrow>* cs' \<and> final cs')"
   by (metis bs_ref_ss final_iff_SKIP ss_ref_bs surj_pair)
