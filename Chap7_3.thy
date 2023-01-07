@@ -15,20 +15,17 @@ Assign: "(x ::= a, s) \<rightarrow> (SKIP, s(x := aval a s))"
 | Repeat: "(REPEAT p UNTIL b, s) \<rightarrow> (p ;; IF b THEN SKIP ELSE REPEAT p UNTIL b, s)"
 | ChoiceLeft: "(p OR q, s) \<rightarrow> (p, s)"
 | ChoiceRight: "(p OR q, s) \<rightarrow> (q, s)"
+| TrySkip: "(TRY SKIP CATCH c, s) \<rightarrow> (SKIP, s)"
+| Try: "(p, s) \<rightarrow> (p', s') \<Longrightarrow> (TRY p CATCH c, s) \<rightarrow> (TRY p' CATCH c, s')"
+| Throw: "(THROW;; p, s) \<rightarrow> (THROW, s)"
+| Catch: "(TRY THROW CATCH c, s) \<rightarrow> (c, s)"
 
 code_pred small_step .
 
+declare small_step.intros [intro]
+
 abbreviation small_steps :: "com \<times> state \<Rightarrow> com \<times> state \<Rightarrow> bool" (infix "\<rightarrow>*" 55)
   where "x \<rightarrow>* y \<equiv> star small_step x y"
-
-values "{(c', map t [''x'', ''y'', ''z'']) | c' t.
-(''x'' ::= V ''z'' ;; ''y'' ::= V ''x'', <''x'' := 3, ''y'' := 7, ''z'' := 5>) \<rightarrow>* (c', t)}"
-
-values "{(c', map t [''x'', ''y'']) | c' t.
-(IF Less (V ''x'') (N 4) THEN ''y'' ::= N 0 ELSE SKIP, <''x'' := 3, ''y'' := 7>) \<rightarrow>* (c', t)}"
-
-values "{(c', map t [''x'']) | c' t.
-(WHILE Less (V ''x'') (N 3) DO ''x'' ::= Plus (V ''x'') (N 1), <''x'' := 0>) \<rightarrow>* (c', t)}"
 
 inductive_cases SkipE[elim!]: "(SKIP, s) \<rightarrow> cs"
 thm SkipE
@@ -44,95 +41,81 @@ inductive_cases RepeatE[elim]: "(REPEAT c UNTIL b, s) \<rightarrow> cs"
 thm RepeatE
 inductive_cases ChoiceE[elim!]: "(p OR q, s) \<rightarrow> cs"
 thm ChoiceE
-
-lemma "\<lbrakk> (p, s) \<rightarrow>* (SKIP, s'); (p', s') \<rightarrow>* cs \<rbrakk> \<Longrightarrow> (p ;; p', s) \<rightarrow>* cs"
-  apply (induct p s SKIP s' rule: star_induct)
-  apply (rule_tac y="(p', b)" in star.step)
-  using Seq1 apply blast
-   apply assumption
-  apply (rule_tac y="(aa;;p', ba)" in star.step)
-  using Seq2 apply blast
-  by simp
-
-lemma bs_ref_ss_aux: "\<lbrakk> (p, s) \<rightarrow>* (SKIP, s'); (p', s') \<rightarrow>* cs \<rbrakk> \<Longrightarrow> (p ;; p', s) \<rightarrow>* cs"
-  apply (induct p s SKIP s' rule: star_induct)
-  by (meson small_step.intros star.step)+
-
-lemma "cs \<Rightarrow> t \<Longrightarrow> cs \<rightarrow>* (SKIP, t)"
-  apply (induct rule: big_step.induct)
-  apply simp
-  using small_step.Assign apply blast
-  using bs_ref_ss_aux apply blast
-  apply (meson small_step.IfTrue star.step)
-  apply (meson small_step.IfFalse star.simps)
-  apply (meson While bs_ref_ss_aux small_step.IfTrue star.step)
-      apply (meson While small_step.IfFalse star.step star_step1)
-  subgoal for b t c s
-   apply (rule star.step[where y="(c;; IF b THEN SKIP ELSE REPEAT c UNTIL b, s)"])
-    using Repeat apply blast
-    by (simp add: bs_ref_ss_aux small_step.IfTrue)
-  apply (meson Repeat bs_ref_ss_aux small_step.IfFalse star.step)
-  apply (meson small_step.ChoiceLeft star.step)
-  by (meson small_step.ChoiceRight star.step)
-
-lemma bs_ref_ss: "cs \<Rightarrow> t \<Longrightarrow> cs \<rightarrow>* (SKIP, t)"
-proof (induct rule: big_step.induct)
-  case Seq
-  thus ?case using bs_ref_ss_aux by blast
-next
-  case WhileTrue
-  thus ?case by (meson bs_ref_ss_aux While small_step.IfTrue star.step)
-next
-  case RepeatFalse
-  thus ?case by (meson Repeat bs_ref_ss_aux small_step.IfFalse star.step)
-next
-  case RepeatTrue
-  thus ?case by (meson Repeat bs_ref_ss_aux small_step.IfTrue star.step star_step1)
-qed (meson small_step.intros star.intros)+
-
-lemma "x \<rightarrow> y \<Longrightarrow> y \<rightarrow>* (SKIP, t) \<Longrightarrow> y \<Rightarrow> t \<Longrightarrow> x \<Rightarrow> t"
-proof (induct arbitrary: t rule: small_step.induct)
-  case (Seq2 p s p' s' q)
-  then show ?case
-    apply (elim Chap7_2.SeqE)
-    apply (frule bs_ref_ss)
-    apply (rule_tac ?s2.0="s2" in Seq)
-    by assumption
-next
-  case While
-  then show ?case
-    apply (elim Chap7_2.IfE)
-    apply (elim Chap7_2.SeqE)
-    by blast+
-qed blast+
-
-lemma ss_ref_bs_aux: "x \<rightarrow> y \<Longrightarrow> y \<rightarrow>* (SKIP, t) \<Longrightarrow> y \<Rightarrow> t \<Longrightarrow> x \<Rightarrow> t"
-proof (induct arbitrary: t rule: small_step.induct)
-  case Seq2
-  thus ?case using bs_ref_ss by auto
-qed blast+
-
-lemma ss_ref_bs: "cs \<rightarrow>* (SKIP, t) \<Longrightarrow> cs \<Rightarrow> t"
-  apply (induct cs "(SKIP, t)" rule: star.induct)
-  using ss_ref_bs_aux by auto
-
-lemma "cs \<rightarrow>* (SKIP, t) = cs \<Rightarrow> t"
-  by (metis ss_ref_bs bs_ref_ss)
+inductive_cases ThrowE[elim!]: "(THROW, s) \<rightarrow> cs"
+thm ThrowE
+inductive_cases TryCatchE[elim]: "(TRY p CATCH c, s) \<rightarrow> cs"
+thm TryCatchE
 
 definition final :: "com * state \<Rightarrow> bool" where
 "final cs \<equiv> \<not>(\<exists>cs'. cs \<rightarrow> cs')"
 
-lemma final_iff_SKIP: "final (c, s) = (c = SKIP)"
-  apply (induction c)
-  unfolding final_def apply blast
-  using small_step.Assign apply blast
-  apply (metis Seq1 Seq2 com.distinct(3) old.prod.exhaust)
-  apply (metis com.distinct(5) small_step.IfFalse small_step.IfTrue)
-  using While apply blast
-  using Repeat apply blast
-  using small_step.ChoiceLeft by blast
+lemma final_iff_SKIP: "final (c, s) = (c = SKIP \<or> c = THROW)"
+  apply (induct c)
+  using final_def apply blast
+  using final_def apply auto[1]
+  apply (metis Seq1 Seq2 com.distinct(39) com.distinct(4) final_def small_step.Throw surj_pair)
+  apply (metis com.distinct(49) com.distinct(5) final_def small_step.IfFalse small_step.IfTrue)
+  apply (metis While com.distinct(57) com.distinct(7) final_def)
+  apply (metis Repeat com.distinct(63) com.distinct(9) final_def)
+  apply (metis com.distinct(11) com.distinct(67) final_def small_step.ChoiceRight)
+  using final_def apply blast
+  by (metis TrySkip com.distinct(15) com.distinct(71) final_def small_step.Catch small_step.Try surj_pair)
+
+lemma bs_ref_ss_aux: "\<lbrakk> (c1, s1) \<rightarrow>* (SKIP, s2); (c2, s2) \<rightarrow>* cs \<rbrakk> \<Longrightarrow> (c1;; c2, s1) \<rightarrow>* cs"
+  apply (induct c1 s1 SKIP s2 rule: star_induct)
+   apply (meson Seq1 star.step)
+  by (meson Seq2 star.step)
+
+lemma bs_ref_ss_aux1: "(c1, s1) \<rightarrow>* (THROW, s2) \<Longrightarrow> (c1;; c2, s1) \<rightarrow>* (THROW, s2)"
+  apply (induct c1 s1 THROW s2 rule: star_induct)
+   apply (simp add: small_step.Throw)
+  by (meson Seq2 star.step)
+
+lemma bs_ref_ss_aux2: "(p, s) \<rightarrow>* (SKIP, s') \<Longrightarrow> (TRY p CATCH c, s) \<rightarrow>* (SKIP, s')"
+  apply (induct p s SKIP s' rule: star_induct)
+  apply (simp add: TrySkip)
+  by (meson small_step.Try star.step)
+
+lemma bs_ref_ss_aux3: "\<lbrakk> (c1, s1) \<rightarrow>* (THROW, s2); (c2, s2) \<rightarrow>* r'\<rbrakk> \<Longrightarrow> (TRY c1 CATCH c2, s1) \<rightarrow>* r'"
+  apply (induct c1 s1 THROW s2 rule: star_induct)
+  apply (meson small_step.Catch star.step)
+  by (meson small_step.Try star.step)
+
+lemma bs_ref_ss: "cs \<Rightarrow> cs' \<Longrightarrow> cs \<rightarrow>* cs' \<and> final cs'"
+  unfolding final_def apply (induct rule: big_step.induct)
+  apply blast+
+  using bs_ref_ss_aux apply blast
+  using bs_ref_ss_aux1 apply blast
+             apply (meson small_step.IfTrue star.step)
+            apply (metis small_step.IfFalse star.step)
+           apply (meson While bs_ref_ss_aux small_step.IfTrue star.step)
+          apply (meson While bs_ref_ss_aux1 small_step.IfTrue star.simps)
+         apply (meson Chap7_3.SkipE While small_step.IfFalse star.step star_step1)
+        apply (meson Repeat bs_ref_ss_aux small_step.IfTrue star.step star_step1)
+       apply (meson Repeat bs_ref_ss_aux small_step.IfFalse star.step)
+      apply (meson Repeat bs_ref_ss_aux1 star.step)
+     apply (meson small_step.ChoiceLeft star.step)
+    apply (meson small_step.ChoiceRight star.step)
+  using bs_ref_ss_aux2 apply blast
+  using bs_ref_ss_aux3 by blast
+
+lemma ss_ref_bs_aux:
+"\<lbrakk> cs \<rightarrow> cs'; cs' \<Rightarrow> cs''; final cs'' \<rbrakk> \<Longrightarrow> cs \<Rightarrow> cs''"
+  unfolding final_def
+proof (induct arbitrary: cs'' rule: small_step.induct)
+  case Seq2
+  thus ?case using bs_ref_ss by auto
+qed blast+
+
+lemma ss_ref_bs: "\<lbrakk> cs \<rightarrow>* cs'; final cs' \<rbrakk> \<Longrightarrow> cs \<Rightarrow> cs'"
+  apply (induct cs cs' rule: star.induct)
+  using final_iff_SKIP apply force
+  using ss_ref_bs_aux by force
+
+lemma ss_eq_bs: "final cs' \<and> cs \<rightarrow>* cs' \<longleftrightarrow> cs \<Rightarrow> cs'"
+  by (metis ss_ref_bs bs_ref_ss)
 
 lemma "(\<exists>t. cs \<Rightarrow> t) = (\<exists>cs'. cs \<rightarrow>* cs' \<and> final cs')"
-  by (metis bs_ref_ss final_iff_SKIP ss_ref_bs surj_pair)
+  using ss_eq_bs by blast
 
 end
